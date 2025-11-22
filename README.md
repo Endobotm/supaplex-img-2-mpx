@@ -40,8 +40,8 @@ Converts images into playable Supaplex levels through tile mapping and color mat
 ## Installation
 
 ```bash
-git clone https://github.com/[your-username]/img2mpx
-cd img2mpx
+git clone https://github.com/Endobotm/supaplex-img-2-mpx.git
+cd supaplex-img-2-mpx
 pip install -r requirements.txt
 python img2mpx.py
 ```
