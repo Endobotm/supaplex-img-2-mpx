@@ -30,7 +30,7 @@ Converts images into playable Supaplex levels through tile mapping and color mat
 | Feature                   | Description                                  |
 | ------------------------- | -------------------------------------------- |
 | **Image → Level**         | Converts PNG/JPG/BMP/GIF to .mpx format(duh) |
-| **Color Palette Control** | Adjustable 1-100 color palette reduction     |
+| **Color Palette Control** | Adjustable color palette reduction           |
 | **Smart Scaling**         | Auto-scales preview to prevent RAM death     |
 | **Preview**               | See how the level will look in-game          |
 | **Dark Theme**            | Because it's 2025 and light mode is a crime  |

@@ -1,162 +1,173 @@
+import os
+import re
+import sys
+import threading
+import ctypes
+from functools import lru_cache
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import os
+from PIL import Image, ImageTk
 import numpy as np
 from colorama import Fore, Style
-import re
-from tkinter import filedialog
-from PIL import Image, ImageTk
-import sv_ttk
-import sys
-import pywinstyles
-import ctypes
+from skimage.color import rgb2lab, deltaE_cie76
 
+try:
+    import sv_ttk
+except Exception:
+    sv_ttk = None
+
+try:
+    import pywinstyles
+except Exception:
+    pywinstyles = None
+TILE_DIR = "tiles"
+DEFAULT_PALETTE = 32
+DEFAULT_TILE_WH = (50, 50)
 root = tk.Tk()
 root.title("Converter")
 root.geometry("920x340")
 root.resizable(False, False)
-sv_ttk.set_theme("dark")
-palette_count_var = tk.IntVar(value=32)
-selected_image_var = tk.StringVar(value="File Name:")
+if sv_ttk:
+    try:
+        sv_ttk.set_theme("dark")
+    except Exception:
+        pass
+
+palette_count_var = tk.IntVar(value=DEFAULT_PALETTE)
+selected_image_var = tk.StringVar(value="")
 level_name_var = tk.StringVar(value="")
 output_filename_var = tk.StringVar(value="level")
-TILE_DIR = "tiles"
-PALETTE_COLORS = 32
-INPUT_IMAGE = ""
-LEVEL_NAME = ""
-OUTPUT_MPX = ""
+
+
+def set_dpi_aware(root):
+    try:
+        if sys.platform == "win32":
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+            ctypes.windll.user32.SetProcessDPIAware()
+        monitor_dpi = root.winfo_fpixels("1i")
+        scaling_factor = max(1.0, monitor_dpi / 96.0) * 1.7
+        root.tk.call("tk", "scaling", scaling_factor)
+    except Exception as e:
+        print(Fore.YELLOW + f"[!] DPI setup failed: {e}" + Style.RESET_ALL)
 
 
 def apply_theme_to_titlebar(root):
-    version = sys.getwindowsversion()
-
-    if version.major == 10 and version.build >= 22000:
-        pywinstyles.change_header_color(
-            root, "#1c1c1c" if sv_ttk.get_theme() == "dark" else "#fafafa"
-        )
-    elif version.major == 10:
-        pywinstyles.apply_style(
-            root, "dark" if sv_ttk.get_theme() == "dark" else "normal"
-        )
-        root.wm_attributes("-alpha", 0.99)
-        root.wm_attributes("-alpha", 1)
-
-
-def select_image():
-    path = filedialog.askopenfilename(
-        title="Select input image",
-        filetypes=[
-            ("Image files", "*.png *.jpg *.jpeg *.bmp *.gif"),
-            ("All files", "*.*"),
-        ],
-    )
-    # WHY IS IT SO FUCKING BIG ITS JUST TO GET A VARIABLE AND TO DISPLAY THE IMAGE
-    if path:
-        selected_image_var.set(path)
-        filename_label.config(text=f"File Name: {os.path.basename(path)}")
-        img = Image.open(path)
-        canvas_w = 490
-        canvas_h = 300
-        img_w, img_h = img.size
-        scale = min(canvas_w / img_w, canvas_h / img_h)
-        new_w = int(img_w * scale)
-        new_h = int(img_h * scale)
-        img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        tk_img = ImageTk.PhotoImage(img)
-        canvas.image = tk_img
-        canvas.delete("all")
-        canvas.create_image(
-            canvas_w // 2, canvas_h // 2, image=tk_img, anchor=tk.CENTER
-        )
+    try:
+        version = sys.getwindowsversion()
+        if pywinstyles and version.major == 10 and version.build >= 22000:
+            pywinstyles.change_header_color(
+                root,
+                "#1c1c1c" if sv_ttk and sv_ttk.get_theme() == "dark" else "#fafafa",
+            )
+        elif pywinstyles and version.major == 10:
+            pywinstyles.apply_style(
+                root, "dark" if sv_ttk and sv_ttk.get_theme() == "dark" else "normal"
+            )
+            root.wm_attributes("-alpha", 0.99)
+            root.wm_attributes("-alpha", 1)
+    except Exception:
+        pass
 
 
-def avg_rgb(img):
-    arr = np.array(img)
-    r = int(arr[:, :, 0].mean())
-    g = int(arr[:, :, 1].mean())
-    b = int(arr[:, :, 2].mean())
-    return (r, g, b)
+@lru_cache(maxsize=1)
+def load_tiles(tile_dir=TILE_DIR):
+    files = [f for f in os.listdir(tile_dir) if f.lower().endswith(".png")]
+
+    def extract_num(s):
+        m = re.findall(r"\d+", s)
+        return int(m[0]) if m else 10**9
+
+    files = sorted(files, key=extract_num)
+
+    tile_imgs = []
+    tile_ids = []
+    lab_avgs = []
+
+    for fname in files:
+        path = os.path.join(tile_dir, fname)
+        try:
+            img = Image.open(path).convert("RGB")
+        except Exception as e:
+            print(
+                Fore.RED + f"[ERR] Failed to open tile {fname}: {e}" + Style.RESET_ALL
+            )
+            continue
+        if img.size != DEFAULT_TILE_WH:
+            img = img.resize(DEFAULT_TILE_WH, Image.NEAREST)
+
+        arr = np.array(img).astype(np.uint8)
+        lab = rgb2lab(arr / 255.0)
+        lab_avg = lab.mean(axis=(0, 1))
+        lab_avgs.append(lab_avg)
+
+        tile_imgs.append(img)
+        tile_ids.append(extract_num(fname))
+    if any(i >= 10**9 for i in tile_ids):
+        tile_ids = list(range(len(tile_imgs)))
+
+    print(Fore.GREEN + f"[!] Loaded {len(tile_imgs)} tiles (cached)." + Style.RESET_ALL)
+    return tile_ids, tile_imgs, np.stack(lab_avgs) if lab_avgs else np.zeros((0, 3))
 
 
-def color_distance(a, b):
-    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
-
-
-def reduce_palette(img, n_colors):
-    img_quantized = img.convert(
-        "P", palette=Image.ADAPTIVE, colors=n_colors, dither=Image.FLOYDSTEINBERG
-    )
-    return img_quantized.convert("RGB")
-
-
-def load_tiles(tile_dir):
-    tile_files = sorted(
-        [f for f in os.listdir(tile_dir) if f.endswith(".png")],
-        key=lambda s: int(re.findall(r"\d+", s)[0]),
-    )
-
-    colors = []
-    for f in tile_files:
-        img = Image.open(os.path.join(tile_dir, f)).convert("RGB")
-        colors.append(avg_rgb(img))
-
-    print(Fore.GREEN + f"[!] Loaded {len(tile_files)} tiles!" + Style.RESET_ALL)
-    return colors, tile_files
-
-
-def pick_best_tile(rgb, tile_colors):
-    best_idx = 0
-    best_dist = float("inf")
-
-    for idx, tile_color in enumerate(tile_colors):
-        dist = color_distance(rgb, tile_color)
-        if dist < best_dist:
-            best_dist = dist
-            best_idx = idx
-
+def pick_best_tile_for_rgb(rgb_tuple, tile_ids, tile_lab_avgs):
+    rgb_arr = np.uint8([[rgb_tuple]])
+    lab_pixel = rgb2lab(rgb_arr / 255.0)[0][0]
+    if tile_lab_avgs.size == 0:
+        return 0
+    diffs = tile_lab_avgs - lab_pixel
+    dists = np.sum(diffs * diffs, axis=1)
+    best_idx = int(np.argmin(dists))
     return best_idx
 
 
-def convert_image(img_path, tile_colors):
+def reduce_palette(img, n_colors):
+    try:
+        if n_colors >= 255:
+            return img.convert("RGB")
+        q = img.convert(
+            "P", palette=Image.ADAPTIVE, colors=n_colors, dither=Image.FLOYDSTEINBERG
+        )
+        return q.convert("RGB")
+    except Exception as e:
+        print(Fore.YELLOW + f"[!] Palette reduction failed: {e}" + Style.RESET_ALL)
+        return img.convert("RGB")
+
+
+def convert_image_to_tile_ids(img_path, palette_colors):
     img = Image.open(img_path).convert("RGB")
+    w, h = img.size
     print(
         Fore.CYAN
-        + f"[+] Reducing palette to {PALETTE_COLORS} colors..."
+        + f"[+] Reducing palette to {palette_colors} colors..."
         + Style.RESET_ALL
     )
-    img = reduce_palette(img, PALETTE_COLORS)
+    img = reduce_palette(img, palette_colors)
 
-    w, h = img.size
+    tile_ids_list, tile_imgs, tile_lab_avgs = load_tiles()
     print(Fore.CYAN + f"[+] Converting {w}x{h} Image to Tiles..." + Style.RESET_ALL)
 
     ids = []
-    unique_colors = {}
-
+    unique_cache = {}
     for y in range(h):
         for x in range(w):
             rgb = img.getpixel((x, y))
-            if rgb not in unique_colors:
-                unique_colors[rgb] = pick_best_tile(rgb, tile_colors)
-
-            ids.append(unique_colors[rgb])
+            if rgb not in unique_cache:
+                best = pick_best_tile_for_rgb(rgb, tile_ids_list, tile_lab_avgs)
+                unique_cache[rgb] = best
+            ids.append(unique_cache[rgb])
 
     print(
         Fore.GREEN
-        + f"[!] Mapped {len(unique_colors)} unique colors to tiles!"
+        + f"[!] Mapped {len(unique_cache)} unique colors to tiles!"
         + Style.RESET_ALL
     )
     return ids, w, h
 
 
-def build_preview(tile_ids, w, h, tile_files):
-    tile_imgs = [
-        Image.open(os.path.join(TILE_DIR, f)).convert("RGB") for f in tile_files
-    ]
-    MAX_PREVIEW_SIZE = 2000
-
-    TILE_SIZE = min(50, MAX_PREVIEW_SIZE // max(w, h))
-    TILE_SIZE = max(1, TILE_SIZE)
-
+def build_preview(tile_ids_flat, w, h, tile_imgs, tile_ids_list):
+    MAX_PREVIEW = 4000
+    TILE_SIZE = min(DEFAULT_TILE_WH[0], max(5, MAX_PREVIEW // max(w, h)))
     print(
         Fore.YELLOW
         + f"[-] Using {TILE_SIZE}x{TILE_SIZE}px tiles for preview"
@@ -166,24 +177,19 @@ def build_preview(tile_ids, w, h, tile_files):
 
     for y in range(h):
         for x in range(w):
-            tile_index = tile_ids[y * w + x]
-            tile_img = tile_imgs[tile_index]
-
-            # because i suck, some of em are 49x50 instead of 50x50...oopsies!
-            tile_img = tile_img.resize((TILE_SIZE, TILE_SIZE), Image.NEAREST)
-
+            idx = tile_ids_flat[y * w + x]
+            if idx < 0 or idx >= len(tile_imgs):
+                continue
+            tile_img = tile_imgs[idx].resize((TILE_SIZE, TILE_SIZE), Image.NEAREST)
             preview.paste(tile_img, (x * TILE_SIZE, y * TILE_SIZE))
-
     return preview
 
 
-def write_mpx(path, tile_ids, w, h, name):
+def write_mpx(path, tile_ids_flat, w, h, name):
     header = bytearray()
     header.extend(b"MPX ")
     header.extend((1).to_bytes(2, "little"))
     header.extend((1).to_bytes(2, "little"))
-
-    # dimensions
     header.extend(w.to_bytes(2, "little"))
     header.extend(h.to_bytes(2, "little"))
     header.extend((0x15).to_bytes(4, "little"))
@@ -196,10 +202,9 @@ def write_mpx(path, tile_ids, w, h, name):
     name_bytes = nm.ljust(NAME_FIELD_LEN, b" ")
     info[offset : offset + NAME_FIELD_LEN] = name_bytes
 
-    # write file
     with open(path, "wb") as f:
         f.write(header)
-        f.write(bytes(tile_ids))
+        f.write(bytes(tile_ids_flat))
         f.write(info)
 
     print(
@@ -207,51 +212,6 @@ def write_mpx(path, tile_ids, w, h, name):
         + f"[!] Wrote {path} ({len(header) + body_len} bytes)"
         + Style.RESET_ALL
     )
-
-
-def start_conversion():
-    global TILE_DIR, INPUT_IMAGE, LEVEL_NAME, OUTPUT_MPX, PALETTE_COLORS
-
-    INPUT_IMAGE = selected_image_var.get()
-    LEVEL_NAME = level_name_var.get() if level_name_var.get() else "Untitled Level"
-    OUTPUT_MPX = f"{output_filename_var.get()}.mpx"
-    PALETTE_COLORS = palette_count_var.get()
-
-    if not INPUT_IMAGE or INPUT_IMAGE == "File Name:":
-        messagebox.showerror("Error", "Please select an input image first!")
-        return
-    progress["value"] = 0
-    progress["maximum"] = 100
-    root.update_idletasks()
-    tile_colors, tile_files = load_tiles(TILE_DIR)
-    progress["value"] = 20
-    root.update_idletasks()
-    tile_ids, W, H = convert_image(INPUT_IMAGE, tile_colors)
-    progress["value"] = 50
-    root.update_idletasks()
-    write_mpx(OUTPUT_MPX, tile_ids, W, H, LEVEL_NAME)
-    progress["value"] = 70
-    root.update_idletasks()
-    print(Fore.GREEN + "[!] Conversion Complete!" + Style.RESET_ALL)
-    preview_img = build_preview(tile_ids, W, H, tile_files)
-    progress["value"] = 90
-    root.update_idletasks()
-
-    preview_img.save("preview.png")
-    canvas_w = 490
-    canvas_h = 300
-    img_w, img_h = preview_img.size
-    scale = min(canvas_w / img_w, canvas_h / img_h)
-    new_w = int(img_w * scale)
-    new_h = int(img_h * scale)
-    preview_img = preview_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-    tk_img = ImageTk.PhotoImage(preview_img)
-    canvas.image = tk_img
-    canvas.delete("all")
-    canvas.create_image(canvas_w // 2, canvas_h // 2, image=tk_img, anchor=tk.CENTER)
-    progress["value"] = 100
-    root.update_idletasks()
-    print(Fore.YELLOW + "[!] Preview image saved as preview.png" + Style.RESET_ALL)
 
 
 left = ttk.Labelframe(root, text="Convertor Config")
@@ -267,30 +227,53 @@ ttk.Entry(left, textvariable=output_filename_var).place(
 ttk.Label(left, text=".mpx").place(x=365, y=60, width=35, height=21)
 
 ttk.Separator(left).place(x=10, y=95, width=380)
-
 ttk.Label(left, text="Number of Colours for Palette:").place(
     x=10, y=100, width=215, height=35
 )
-ttk.Spinbox(left, from_=1, to=100, textvariable=palette_count_var).place(
+ttk.Spinbox(left, from_=1, to=256, textvariable=palette_count_var).place(
     x=210, y=100, width=185, height=35
 )
 
 select_frame = ttk.Labelframe(left, text="Select Input Image")
 select_frame.place(x=10, y=140, width=380, height=85)
 
+
+def select_image():
+    path = filedialog.askopenfilename(
+        title="Select input image",
+        filetypes=[
+            ("Image files", "*.png *.jpg *.jpeg *.bmp *.gif"),
+            ("All files", "*.*"),
+        ],
+    )
+    if path:
+        selected_image_var.set(path)
+        filename_label.config(text=f"File Name: {os.path.basename(path)}")
+        img = Image.open(path).convert("RGB")
+        canvas_w, canvas_h = 490, 300
+        img_w, img_h = img.size
+        scale = min(canvas_w / img_w, canvas_h / img_h)
+        new_w = int(img_w * scale)
+        new_h = int(img_h * scale)
+        img_small = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        tk_img = ImageTk.PhotoImage(img_small)
+        canvas.image = tk_img
+        canvas.delete("all")
+        canvas.create_image(
+            canvas_w // 2, canvas_h // 2, image=tk_img, anchor=tk.CENTER
+        )
+
+
 ttk.Button(select_frame, text="Select Image", command=select_image).place(
     x=10, y=20, width=106, height=35
 )
-
-filename_label = ttk.Label(select_frame, text=selected_image_var.get(), anchor="w")
+filename_label = ttk.Label(select_frame, text="File Name:", anchor="w")
 filename_label.place(x=120, y=20, width=246, height=35)
 
 ttk.Separator(left).place(x=10, y=232, width=380)
-
 progress = ttk.Progressbar(left, mode="determinate")
 progress.place(x=10, y=240, width=240, height=35)
-
-ttk.Button(left, text="Start Conversion", command=start_conversion).place(
+ttk.Button(left, text="Start Conversion", command=lambda: start_conversion()).place(
     x=260, y=240, width=130, height=35
 )
 
@@ -298,18 +281,72 @@ canvas = tk.Canvas(root, background="#18191b")
 canvas.place(x=420, y=20, width=490, height=300)
 
 
-def set_dpi_aware(root):
+def update_progress(val):
+    progress["value"] = val
+    root.update_idletasks()
+
+
+def display_preview(preview_img):
+    canvas_w, canvas_h = 490, 300
+    img_w, img_h = preview_img.size
+    scale = min(canvas_w / img_w, canvas_h / img_h)
+    new_w = max(1, int(img_w * scale))
+    new_h = max(1, int(img_h * scale))
+    preview_small = preview_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    tk_img = ImageTk.PhotoImage(preview_small)
+    canvas.image = tk_img
+    canvas.delete("all")
+    canvas.create_image(canvas_w // 2, canvas_h // 2, image=tk_img, anchor=tk.CENTER)
+
+
+def worker_conversion():
     try:
-        if sys.platform == "win32":
-            ctypes.windll.shcore.SetProcessDpiAwareness(1)
-            ctypes.windll.user32.SetProcessDPIAware()
-        monitor_dpi = root.winfo_fpixels("1i")
-        scaling_factor = max(1.0, monitor_dpi / 96.0) * 1.7
-        root.tk.call("tk", "scaling", scaling_factor)
+        update_progress(5)
+        input_path = selected_image_var.get()
+        if not input_path:
+            messagebox.showerror("Error", "Please select an input image first!")
+            update_progress(0)
+            return
+
+        palette_colors = palette_count_var.get()
+        output_name = output_filename_var.get().strip() or "level"
+        level_name = level_name_var.get().strip() or "Untitled Level"
+        output_path = f"{output_name}.mpx"
+
+        update_progress(10)
+        tile_ids_list, tile_imgs, tile_lab_avgs = load_tiles()
+
+        update_progress(30)
+        tile_ids_flat, W, H = convert_image_to_tile_ids(input_path, palette_colors)
+
+        update_progress(65)
+        write_mpx(output_path, tile_ids_flat, W, H, level_name)
+
+        update_progress(80)
+        preview_img = build_preview(tile_ids_flat, W, H, tile_imgs, tile_ids_list)
+
+        update_progress(90)
+        preview_img.save("preview.png")
+        display_preview(preview_img)
+
+        update_progress(100)
+        print(Fore.GREEN + "[!] Conversion Complete!" + Style.RESET_ALL)
     except Exception as e:
-        print(f"Failed to set DPI awareness: {e}")
+        print(
+            Fore.RED
+            + f"[ERR] Encountered error during conversion: {e}"
+            + Style.RESET_ALL
+        )
+    finally:
+        root.after(600, lambda: update_progress(0))
+
+
+def start_conversion():
+    t = threading.Thread(target=worker_conversion, daemon=True)
+    t.start()
 
 
 set_dpi_aware(root)
 apply_theme_to_titlebar(root)
-root.mainloop()
+if __name__ == "__main__":
+    root.mainloop()
