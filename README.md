@@ -93,7 +93,6 @@ pywinstyles
 - Uses PIL for image processing
 - k-means clustering for tile color detection
 - Floyd-Steinberg dithering for palette reduction
-- Custom MPX binary format writer
 
 ---
 
