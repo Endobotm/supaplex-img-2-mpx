@@ -264,7 +264,7 @@ ttk.Button(
     left, text="Start Conversion", command=lambda: start_conversion(), takefocus=0
 ).place(x=260, y=240, width=130, height=35)
 ttk.Button(
-    left, text="Quick Preview", command=lambda: start_conversion(False), takefocus=0
+    left, text="Quick Preview", command=lambda: start_conversion(0), takefocus=0
 ).place(x=279, y=149, width=110, height=35)
 canvas = tk.Canvas(root, background="#18191b")
 canvas.place(x=420, y=20, width=490, height=300)

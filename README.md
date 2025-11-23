@@ -70,7 +70,7 @@ numpy
 colorama
 sv-ttk
 pywinstyles
-(some more im too lazy to list out... just check the fucking file)
+(some more im too lazy to list out... just install requirements.txt mate)
 ```
 
 ---
@@ -78,9 +78,10 @@ pywinstyles
 ## Usage
 
 1. **Select Image** - Click "Select Image", pick your file
-2. **Configure** - Set level name, filename, palette colors
-3. **Convert** - Hit "Start Conversion"
-4. **Play** - Load the .mpx file in Supaplex
+2. **Configure** - Set level name, filename and palette colors
+3. **Adjust** - Hit "Quick Preview" to view how the level will look, then adjust the values as needed
+4. **Convert** - Hit "Start Conversion" and wait
+5. **Play** - Load the .mpx file in Supaplex
 
 **Pro Tips:**
 
