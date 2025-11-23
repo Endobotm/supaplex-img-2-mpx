@@ -130,13 +130,25 @@ pywinstyles
 - If you try, I will convert YOU into tiles
 - Yes, this is a threat
 
----
+⚠️ **Potentially Harmful ~~bugs~~ Features**
+
+- Preview images that are generated can be anywhere from 5-50x the size of the original images
 
 ## Known Issues
 
 - Some tiles are 49×50 instead of 50×50 (oopsies)
 - Very large images take time (it's not frozen, just thinking)
 - Progress bar is cosmetic (but it looks cool)
+
+---
+
+## Upcoming Features(maybe...no promises)
+
+- [] Fully Rust-based
+- [] Optimizations
+- [] Better Colour Accuracy(if possible lmao)
+- [] Better GUI
+- [] Built-in Basic Level Editor
 
 ---
 
