@@ -134,6 +134,7 @@ def reduce_palette(img, n_colors):
         q = img.convert(
             "P", palette=Image.ADAPTIVE, colors=n_colors, dither=Image.FLOYDSTEINBERG
         )
+        display_preview(q.convert("RGB"))
         return q.convert("RGB")
     except Exception as e:
         print(Fore.RED + f"[ERR] Palette reduction failed: {e}" + Style.RESET_ALL)

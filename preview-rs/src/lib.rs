@@ -8,7 +8,6 @@ mod preview_rs {
     use pyo3::prelude::*;
     use std::cmp;
     use std::fs;
-    /// Formats the sum of two numbers as string.
     fn load_tiles_from_dir(tile_dir: &str) -> Result<Vec<RgbImage>> {
         let mut tiles: Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>> = Vec::new();
 

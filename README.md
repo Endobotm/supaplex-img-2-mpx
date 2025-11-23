@@ -169,8 +169,13 @@ If you improve it, submit a PR (or don't, idfc).
 
 <div align="center">
 ```
-Made with pixel-perfect OCD and questionable design decisions. And Remember;
-don't vibe code lads, that ain't code
+Made with pixel-perfect OCD and questionable design decisions.
+```
+
+</div>
+<div align="center">
+```
+And Remember; don't vibe code lads, that ain't code
 ```
 
 </div>
