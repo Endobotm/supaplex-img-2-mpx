@@ -4,7 +4,7 @@ import sys
 import threading
 import ctypes
 from functools import lru_cache
-
+import io
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
@@ -21,6 +21,10 @@ try:
     import pywinstyles
 except Exception:
     pywinstyles = None
+
+# custom rust previewer
+import preview_rs
+
 TILE_DIR = "tiles"
 DEFAULT_PALETTE = 32
 DEFAULT_TILE_WH = (50, 50)
@@ -49,7 +53,7 @@ def set_dpi_aware(root):
         scaling_factor = max(1.0, monitor_dpi / 96.0) * 1.7
         root.tk.call("tk", "scaling", scaling_factor)
     except Exception as e:
-        print(Fore.YELLOW + f"[!] DPI setup failed: {e}" + Style.RESET_ALL)
+        print(Fore.RED + f"[ERR] DPI setup failed: {e}" + Style.RESET_ALL)
 
 
 def apply_theme_to_titlebar(root):
@@ -103,6 +107,7 @@ def load_tiles(tile_dir=TILE_DIR):
 
         tile_imgs.append(img)
         tile_ids.append(extract_num(fname))
+    # why did i add this? i forgor...better question what does this do??? where did i get this from??? i need to get more sleep lmao...or not ig im a 10x dev when sleep deprived
     if any(i >= 10**9 for i in tile_ids):
         tile_ids = list(range(len(tile_imgs)))
 
@@ -115,8 +120,9 @@ def pick_best_tile_for_rgb(rgb_tuple, tile_ids, tile_lab_avgs):
     lab_pixel = rgb2lab(rgb_arr / 255.0)[0][0]
     if tile_lab_avgs.size == 0:
         return 0
-    diffs = tile_lab_avgs - lab_pixel
-    dists = np.sum(diffs * diffs, axis=1)
+    # delta-E :D
+    # my dumbass imported delta-e then did it manually...guess i should have read THE FUCKING CODE BEFORE I BLINDLY ctrl+c ctrl+v IT HERE
+    dists = deltaE_cie76(lab_pixel, tile_lab_avgs)
     best_idx = int(np.argmin(dists))
     return best_idx
 
@@ -130,7 +136,7 @@ def reduce_palette(img, n_colors):
         )
         return q.convert("RGB")
     except Exception as e:
-        print(Fore.YELLOW + f"[!] Palette reduction failed: {e}" + Style.RESET_ALL)
+        print(Fore.RED + f"[ERR] Palette reduction failed: {e}" + Style.RESET_ALL)
         return img.convert("RGB")
 
 
@@ -165,24 +171,25 @@ def convert_image_to_tile_ids(img_path, palette_colors):
     return ids, w, h
 
 
-def build_preview(tile_ids_flat, w, h, tile_imgs, tile_ids_list):
-    MAX_PREVIEW = 4000
-    TILE_SIZE = min(DEFAULT_TILE_WH[0], max(5, MAX_PREVIEW // max(w, h)))
-    print(
-        Fore.YELLOW
-        + f"[-] Using {TILE_SIZE}x{TILE_SIZE}px tiles for preview"
-        + Style.RESET_ALL
-    )
-    preview = Image.new("RGB", (w * TILE_SIZE, h * TILE_SIZE))
+# hehehehe fuck you python imma rust this function eheheehehe
+# def build_preview(tile_ids_flat, w, h, tile_imgs, tile_ids_list):
+#     MAX_PREVIEW = 4000
+#     TILE_SIZE = min(DEFAULT_TILE_WH[0], max(5, MAX_PREVIEW // max(w, h)))
+#     print(
+#         Fore.YELLOW
+#         + f"[-] Using {TILE_SIZE}x{TILE_SIZE}px tiles for preview"
+#         + Style.RESET_ALL
+#     )
+#     preview = Image.new("RGB", (w * TILE_SIZE, h * TILE_SIZE))
 
-    for y in range(h):
-        for x in range(w):
-            idx = tile_ids_flat[y * w + x]
-            if idx < 0 or idx >= len(tile_imgs):
-                continue
-            tile_img = tile_imgs[idx].resize((TILE_SIZE, TILE_SIZE), Image.NEAREST)
-            preview.paste(tile_img, (x * TILE_SIZE, y * TILE_SIZE))
-    return preview
+#     for y in range(h):
+#         for x in range(w):
+#             idx = tile_ids_flat[y * w + x]
+#             if idx < 0 or idx >= len(tile_imgs):
+#                 continue
+#             tile_img = tile_imgs[idx].resize((TILE_SIZE, TILE_SIZE), Image.NEAREST)
+#             preview.paste(tile_img, (x * TILE_SIZE, y * TILE_SIZE))
+#     return preview
 
 
 def write_mpx(path, tile_ids_flat, w, h, name):
@@ -323,10 +330,28 @@ def worker_conversion():
         write_mpx(output_path, tile_ids_flat, W, H, level_name)
 
         update_progress(80)
-        preview_img = build_preview(tile_ids_flat, W, H, tile_imgs, tile_ids_list)
+        print(Fore.CYAN + "[+] Generating Preview..." + Style.RESET_ALL)
+        raw_bytes = preview_rs.generate_preview(
+            tile_ids_flat,
+            W,
+            H,
+            TILE_DIR,
+            [50, 50],
+        )
+        MAX_PREVIEW = 4000
+        TILE_SIZE = min(50, max(5, MAX_PREVIEW // max(W, H)))
+        preview_img = Image.frombytes(
+            "RGB", (W * TILE_SIZE, H * TILE_SIZE), bytes(raw_bytes)
+        )
+        print(
+            Fore.YELLOW
+            + f"[-] Preview generated with tile size set to {TILE_SIZE}x{TILE_SIZE}px"
+            + Style.RESET_ALL
+        )
 
         update_progress(90)
         preview_img.save("preview.png")
+        print(Fore.GREEN + "[!] Preview saved as preview.png" + Style.RESET_ALL)
         display_preview(preview_img)
 
         update_progress(100)
@@ -348,5 +373,43 @@ def start_conversion():
 
 set_dpi_aware(root)
 apply_theme_to_titlebar(root)
+img_part = """
+██╗███╗   ███╗ ██████╗ 
+██║████╗ ████║██╔════╝ 
+██║██╔████╔██║██║  ███╗
+██║██║╚██╔╝██║██║   ██║
+██║██║ ╚═╝ ██║╚██████╔╝
+╚═╝╚═╝     ╚═╝ ╚═════╝ 
+"""
+two_part = """
+██████╗ 
+╚════██╗
+ █████╔╝
+██╔═══╝ 
+███████╗
+ ╚══════╝
+"""
+mpx_part = """
+███╗   ███╗██████╗ ██╗  ██╗
+████╗ ████║██╔══██╗╚██╗██╔╝
+██╔████╔██║██████╔╝ ╚███╔╝ 
+██║╚██╔╝██║██╔═══╝  ██╔██╗ 
+██║ ╚═╝ ██║██║     ██╔╝ ██╗
+╚═╝     ╚═╝╚═╝     ╚═╝  ╚═╝
+"""
+lines_img = img_part.strip().split("\n")
+lines_two = two_part.strip().split("\n")
+lines_mpx = mpx_part.strip().split("\n")
+for i in range(len(lines_img)):
+    print(
+        Fore.CYAN
+        + lines_img[i]
+        + Fore.WHITE
+        + lines_two[i]
+        + Fore.GREEN
+        + lines_mpx[i]
+        + Style.RESET_ALL
+    )
+print(f"[i] A tool made by {Fore.BLUE + 'EndoBotM' + Style.RESET_ALL} <3")
 if __name__ == "__main__":
     root.mainloop()

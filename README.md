@@ -25,13 +25,21 @@ Converts images into playable Supaplex levels through tile mapping and color mat
 
 ---
 
+## Conversion Results
+
+Input Image:
+<img src="1080p-input.png" alt="purple laptop" />
+Converted Level Preview (tile size: 5x5px):
+<img src="preview.png" alt="purple laptop remade using tiles" />
+
+---
+
 ## Features
 
 | Feature                   | Description                                  |
 | ------------------------- | -------------------------------------------- |
 | **Image → Level**         | Converts PNG/JPG/BMP/GIF to .mpx format(duh) |
 | **Color Palette Control** | Adjustable color palette reduction           |
-| **Smart Scaling**         | Auto-scales preview to prevent RAM death     |
 | **Preview**               | See how the level will look in-game          |
 | **Dark Theme**            | Because it's 2025 and light mode is a crime  |
 
@@ -43,6 +51,12 @@ Converts images into playable Supaplex levels through tile mapping and color mat
 git clone https://github.com/Endobotm/supaplex-img-2-mpx.git
 cd supaplex-img-2-mpx
 pip install -r requirements.txt
+cd preview-rs
+python -m venv .env
+pip install maturin
+maturin develop
+cd ..
+pip install -e ./preview-rs
 python img2mpx.py
 ```
 
@@ -71,6 +85,7 @@ pywinstyles
 **Pro Tips:**
 
 - Keep images under 2000×2000 for best performance
+- Set colour palette to 256 for best colour accuracy
 - Think with your brain and not your asshole
 - Drink water BEFORE coffee. Caffeine on empty stomach = anxiety speedrun. Ask me how I know.
 - Nobody reads README files completely. You're probably skimming this right now.
@@ -86,13 +101,15 @@ pywinstyles
 2. **Tile Loading** - Loads Supaplex tileset, calculates average RGB per tile
 3. **Color Matching** - Maps each pixel to closest tile via Euclidean distance
 4. **MPX Encoding** - Writes binary .mpx format (reverse-engineered through trial/error)
-5. **Preview Generation** - Builds preview with dynamic tile scaling
+5. **Preview Generation** - Builds preview with dynamic tile scaling (preview generator is a separate module written in rust for performance)
 
 **Technical Details:**
 
 - Uses PIL for image processing
 - k-means clustering for tile color detection
 - Floyd-Steinberg dithering for palette reduction
+- LAB encoding for better colour matching
+- Delta-E for even more accurate colour matching, accounts for how it appears from a distance...I think
 
 ---
 
@@ -102,8 +119,9 @@ pywinstyles
 
 - Feed this 8K+ images (it will work but your RAM will cry)
 - Use gigapixel images (see above)
-- Expect perfect color accuracy
+- Expect perfect color accuracy (I tried my best dawg, you can only do so much)
 - Blame me if Supaplex crashes (mate shit was meant for puzzles not art)
+- Feed this questionable content (it will work, but you will be looked down upon)
 
 ⚠️ **For the curious:**
 
@@ -140,10 +158,6 @@ pywinstyles
 - Supaplex (the game)
 - Spite (the motivation)
 - Boredom (the catalyst)
-
----
-
-<small>psst, there is a sample input image provided for testing ;)</small>
 
 ## License
 
