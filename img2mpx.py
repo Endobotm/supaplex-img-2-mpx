@@ -172,27 +172,6 @@ def convert_image_to_tile_ids(img_path, palette_colors):
     return ids, w, h
 
 
-# hehehehe fuck you python imma rust this function eheheehehe
-# def build_preview(tile_ids_flat, w, h, tile_imgs, tile_ids_list):
-#     MAX_PREVIEW = 4000
-#     TILE_SIZE = min(DEFAULT_TILE_WH[0], max(5, MAX_PREVIEW // max(w, h)))
-#     print(
-#         Fore.YELLOW
-#         + f"[-] Using {TILE_SIZE}x{TILE_SIZE}px tiles for preview"
-#         + Style.RESET_ALL
-#     )
-#     preview = Image.new("RGB", (w * TILE_SIZE, h * TILE_SIZE))
-
-#     for y in range(h):
-#         for x in range(w):
-#             idx = tile_ids_flat[y * w + x]
-#             if idx < 0 or idx >= len(tile_imgs):
-#                 continue
-#             tile_img = tile_imgs[idx].resize((TILE_SIZE, TILE_SIZE), Image.NEAREST)
-#             preview.paste(tile_img, (x * TILE_SIZE, y * TILE_SIZE))
-#     return preview
-
-
 def write_mpx(path, tile_ids_flat, w, h, name):
     header = bytearray()
     header.extend(b"MPX ")
@@ -238,7 +217,7 @@ ttk.Separator(left).place(x=10, y=95, width=380)
 ttk.Label(left, text="Number of Colours for Palette:").place(
     x=10, y=100, width=215, height=35
 )
-ttk.Spinbox(left, from_=1, to=256, textvariable=palette_count_var).place(
+ttk.Spinbox(left, from_=1, to=256, textvariable=palette_count_var, takefocus=0).place(
     x=210, y=100, width=185, height=35
 )
 
@@ -272,7 +251,7 @@ def select_image():
         )
 
 
-ttk.Button(select_frame, text="Select Image", command=select_image).place(
+ttk.Button(select_frame, text="Select Image", command=select_image, takefocus=0).place(
     x=10, y=20, width=106, height=35
 )
 filename_label = ttk.Label(select_frame, text="File Name:", anchor="w")
@@ -281,10 +260,12 @@ filename_label.place(x=120, y=20, width=246, height=35)
 ttk.Separator(left).place(x=10, y=232, width=380)
 progress = ttk.Progressbar(left, mode="determinate")
 progress.place(x=10, y=240, width=240, height=35)
-ttk.Button(left, text="Start Conversion", command=lambda: start_conversion()).place(
-    x=260, y=240, width=130, height=35
-)
-
+ttk.Button(
+    left, text="Start Conversion", command=lambda: start_conversion(), takefocus=0
+).place(x=260, y=240, width=130, height=35)
+ttk.Button(
+    left, text="Quick Preview", command=lambda: start_conversion(False), takefocus=0
+).place(x=279, y=149, width=110, height=35)
 canvas = tk.Canvas(root, background="#18191b")
 canvas.place(x=420, y=20, width=490, height=300)
 
@@ -307,8 +288,12 @@ def display_preview(preview_img):
     canvas.create_image(canvas_w // 2, canvas_h // 2, image=tk_img, anchor=tk.CENTER)
 
 
-def worker_conversion():
+def worker_conversion(level: int = 1):
     try:
+        if level == 0:
+            generate_level = False
+        else:
+            generate_level = True
         update_progress(5)
         input_path = selected_image_var.get()
         if not input_path:
@@ -321,16 +306,14 @@ def worker_conversion():
         level_name = level_name_var.get().strip() or "Untitled Level"
         output_path = f"{output_name}.mpx"
 
-        update_progress(10)
-        tile_ids_list, tile_imgs, tile_lab_avgs = load_tiles()
-
-        update_progress(30)
+        update_progress(16)
         tile_ids_flat, W, H = convert_image_to_tile_ids(input_path, palette_colors)
 
-        update_progress(65)
-        write_mpx(output_path, tile_ids_flat, W, H, level_name)
+        if generate_level:
+            update_progress(32)
+            write_mpx(output_path, tile_ids_flat, W, H, level_name)
 
-        update_progress(80)
+        update_progress(48)
         print(Fore.CYAN + "[+] Generating Preview..." + Style.RESET_ALL)
         raw_bytes = preview_rs.generate_preview(
             tile_ids_flat,
@@ -344,19 +327,24 @@ def worker_conversion():
         preview_img = Image.frombytes(
             "RGB", (W * TILE_SIZE, H * TILE_SIZE), bytes(raw_bytes)
         )
+        update_progress(64)
         print(
             Fore.YELLOW
             + f"[-] Preview generated with tile size set to {TILE_SIZE}x{TILE_SIZE}px"
             + Style.RESET_ALL
         )
 
-        update_progress(90)
+        update_progress(80)
         preview_img.save("preview.png")
         print(Fore.GREEN + "[!] Preview saved as preview.png" + Style.RESET_ALL)
         display_preview(preview_img)
 
-        update_progress(100)
-        print(Fore.GREEN + "[!] Conversion Complete!" + Style.RESET_ALL)
+        if generate_level:
+            update_progress(100)
+            print(Fore.GREEN + "[!] Conversion Complete!" + Style.RESET_ALL)
+        else:
+            update_progress(100)
+            print(Fore.GREEN + "[!] Preview Generated!" + Style.RESET_ALL)
     except Exception as e:
         print(
             Fore.RED
@@ -367,8 +355,8 @@ def worker_conversion():
         root.after(600, lambda: update_progress(0))
 
 
-def start_conversion():
-    t = threading.Thread(target=worker_conversion, daemon=True)
+def start_conversion(level: int = 1):
+    t = threading.Thread(target=worker_conversion, args=(level,), daemon=True)
     t.start()
 
 
