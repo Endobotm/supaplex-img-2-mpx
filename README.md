@@ -144,11 +144,11 @@ pywinstyles
 
 ## Upcoming Features(maybe...no promises)
 
-- [] Fully Rust-based
-- [] Optimizations
-- [] Better Colour Accuracy(if possible lmao)
-- [] Better GUI
-- [] Built-in Basic Level Editor
+- [ ] Fully Rust-based
+- [ ] Optimizations
+- [ ] Better Colour Accuracy(if possible lmao)
+- [ ] Better GUI
+- [ ] Built-in Basic Level Editor
 
 ---
 
